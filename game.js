@@ -1,0 +1,65 @@
+(() => {
+'use strict';
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const stages=[
+{id:'warmup',name:'Warm-up',desc:'Sunrise Park',emoji:'☀',bpm:100,seconds:60,met:2.5},
+{id:'light',name:'Light',desc:'Campus Park',emoji:'🌿',bpm:115,seconds:60,met:3.5},
+{id:'moderate',name:'Moderate',desc:'Taipei City Run',emoji:'🏙',bpm:128,seconds:90,met:5},
+{id:'vigorous',name:'Vigorous',desc:'Riverside Cherry Blossom',emoji:'🌸',bpm:140,seconds:120,met:7},
+{id:'maximum',name:'Maximum',desc:'Mountain Trail',emoji:'⛰',bpm:150,seconds:120,met:8},
+{id:'interval',name:'Interval',desc:'Night Challenge',emoji:'⚡',bpm:150,seconds:180,met:6},
+{id:'cooldown',name:'Cool-down',desc:'Sunset Lakeside',emoji:'☾',bpm:90,seconds:60,met:2.3}];
+const moves=['up','side','twist','down'], symbols={up:'↑',side:'↔',twist:'⤾',down:'↓'};
+let mode='workout',selected=stages[1],playing=false,paused=false,started=false,frame=0,notes=[],events=[],score=0,combo=0,maxCombo=0,hits=0,misses=0,elapsed=0,clockStart=0,pauseStarted=0,lastFrame=0,feedbackTimer=0,trackMode='keyboard',pose=null,cameraStream=null,poseLoop=false,peer=null,phoneConn=null,phoneMotion=0,phoneArm='left';
+let audio=null,nextBeat=0,beatIndex=0,beatBpm=100;
+const settings={music:35,fx:45,weight:60,reduced:false};
+try{Object.assign(settings,JSON.parse(localStorage.getItem('fitbeatSettings')||'{}'))}catch{}
+function save(){localStorage.setItem('fitbeatSettings',JSON.stringify(settings))}
+function page(id){if(playing) stopGame();$$('.page').forEach(p=>p.classList.toggle('active',p.id===id));window.scrollTo(0,0);if(id==='select')renderStages();if(id==='progress')$('#bestScore').textContent=localStorage.getItem('fitbeatBest')||'0'}
+$$('[data-page]').forEach(b=>b.addEventListener('click',()=>page(b.dataset.page)));
+function renderStages(){const filtered=stages.filter(s=>mode==='workout'?!['warmup','cooldown'].includes(s.id):s.id===mode);$('#stagecards').innerHTML=filtered.map(s=>`<button class="stage-card" data-stage="${s.id}"><img src="assets/${s.id}.webp" alt="${s.desc} stage background"><span class="stage-emoji">${s.emoji}</span><strong>${s.name}</strong><small>${s.desc} · ${s.bpm} BPM · ${s.seconds}s</small></button>`).join('');$$('[data-stage]').forEach(b=>b.onclick=()=>prepare(stages.find(s=>s.id===b.dataset.stage)))}
+$$('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));renderStages()});
+for(const [id,key] of [['musicVol','music'],['fxVol','fx']]){$('#'+id).value=settings[key];$('#'+id.replace('Vol','Out')).textContent=settings[key]+'%';$('#'+id).oninput=e=>{settings[key]=+e.target.value;$('#'+id.replace('Vol','Out')).textContent=settings[key]+'%';save()}}
+$('#weight').value=settings.weight;$('#weight').onchange=e=>{settings.weight=Math.max(20,Math.min(300,+e.target.value||60));save()};
+$('#reduceMotion').checked=settings.reduced;document.body.classList.toggle('reduced',settings.reduced);$('#reduceMotion').onchange=e=>{settings.reduced=e.target.checked;document.body.classList.toggle('reduced',settings.reduced);save()};
+function prepare(stage){selected=stage;page('play');$('#playBg').style.backgroundImage=`url("assets/${stage.id}.webp")`;reset();showOverlay('GET READY','Ready to Move?',`${stage.name} • ${stage.bpm} BPM • ${stage.seconds} seconds`,'▶ Start Game',startGame)}
+function reset(){notes=[];events=[];score=combo=maxCombo=hits=misses=elapsed=0;started=false;playing=false;paused=false;$('#score').textContent='0';$('#combo').textContent='0';$('#timer').textContent=formatTime(selected.seconds);$('#progressBar').style.width='0%';$('#feedback').textContent='';$('#leftNotes').querySelectorAll('.note').forEach(n=>n.remove());$('#rightNotes').querySelectorAll('.note').forEach(n=>n.remove());$('#tracking').textContent=cameraStream?'📷 Camera tracking ready':'⌨ Keyboard mode'}
+function showOverlay(eyebrow,title,desc,action,fn){$('#overlayEyebrow').textContent=eyebrow;$('#overlayTitle').textContent=title;$('#overlayText').textContent=desc;$('#overlayAction').textContent=action;$('#overlayAction').onclick=fn;$('#overlay').classList.remove('hidden')}
+function formatTime(n){n=Math.max(0,Math.ceil(n));return `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`}
+function buildSequence(){const beat=60/selected.bpm;let t=2.2,index=0;const spacing=selected.id==='warmup'||selected.id==='cooldown'?3.6:selected.id==='light'?2.9:selected.id==='moderate'?2.45:selected.id==='vigorous'?2.1:selected.id==='maximum'?1.8:2.0;
+while(t<selected.seconds-1.1){const arm=(index%2===0)?'left':'right';const move=moves[Math.floor(index/2+index%3)%4];events.push({id:index,arm,move,at:t,spawned:false,judged:false});index++;const variable=selected.id==='interval'?(Math.floor(t/30)%2===0?1.7:3.3):spacing;t+=Math.max(variable,beat*2.4)}}
+function initAudio(){try{audio=audio||new (window.AudioContext||window.webkitAudioContext)();audio.resume()}catch{}}
+function tone(freq,duration,vol,type='sine'){if(!audio||vol<=0)return;const osc=audio.createOscillator(),gain=audio.createGain(),now=audio.currentTime;osc.type=type;osc.frequency.setValueAtTime(freq,now);gain.gain.setValueAtTime(Math.min(.16,vol/100*.12),now);gain.gain.exponentialRampToValueAtTime(.001,now+duration);osc.connect(gain).connect(audio.destination);osc.start(now);osc.stop(now+duration+.01)}
+function startGame(){reset();buildSequence();initAudio();$('#overlay').classList.add('hidden');playing=true;started=true;clockStart=performance.now();lastFrame=clockStart;beatIndex=0;nextBeat=0;frame=requestAnimationFrame(tick)}
+function tick(now){if(!playing||paused)return;elapsed=(now-clockStart)/1000;const remain=selected.seconds-elapsed;$('#timer').textContent=formatTime(remain);$('#progressBar').style.width=(100*Math.min(1,elapsed/selected.seconds))+'%';
+const beatInterval=60/selected.bpm;if(settings.music>0){while(nextBeat<=elapsed){tone(beatIndex%4===0?160:110,.065,settings.music,'triangle');nextBeat+=beatInterval;beatIndex++}}
+for(const ev of events){if(!ev.spawned && elapsed>=ev.at-2.5){ev.spawned=true;const el=document.createElement('div');el.className='note '+ev.move;el.innerHTML=`<span aria-label="${ev.move}">${symbols[ev.move]}</span>`;el.setAttribute('aria-label',ev.move);ev.el=el;$('#'+ev.arm+'Notes').append(el);notes.push(ev)}
+if(ev.spawned&&!ev.judged){const area=ev.el.parentElement;const h=area.clientHeight;const target=h*.76+33;const progress=(elapsed-(ev.at-2.5))/2.5;ev.el.style.top=(Math.max(-40,Math.min(h+70,progress*target)))+'px';if(elapsed>ev.at+.38)judge(ev,false)}}
+if(elapsed>=selected.seconds){finish();return}frame=requestAnimationFrame(tick)}
+function feedback(text,good){$('#feedback').textContent=text;$('#feedback').style.color=good?'#81f5e5':'#ff9fbd';clearTimeout(feedbackTimer);feedbackTimer=setTimeout(()=>$('#feedback').textContent='',450)}
+function judge(ev,good){if(ev.judged)return;ev.judged=true;ev.el?.remove();if(good){hits++;combo++;maxCombo=Math.max(combo,maxCombo);const delta=Math.abs(elapsed-ev.at);score+=delta<.14?120:90;feedback(delta<.14?'PERFECT!':'GREAT!',true);tone(delta<.14?660:520,.12,settings.fx)}else{misses++;combo=0;feedback('MISS',false);tone(190,.13,settings.fx)}$('#score').textContent=score;$('#combo').textContent=combo}
+function inputMove(arm,move){if(!playing||paused)return;const candidate=events.filter(e=>e.arm===arm&&e.move===move&&e.spawned&&!e.judged&&Math.abs(e.at-elapsed)<.38).sort((a,b)=>Math.abs(a.at-elapsed)-Math.abs(b.at-elapsed))[0];if(candidate)judge(candidate,true)}
+const keys={'1':['left','up'],'2':['left','side'],'3':['left','twist'],'4':['left','down'],q:['right','up'],w:['right','side'],e:['right','twist'],r:['right','down']};
+window.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;const k=e.key.toLowerCase();if(keys[k]){e.preventDefault();inputMove(...keys[k])}if(k===' '&&$('#play').classList.contains('active')){e.preventDefault();if(playing)togglePause()}});
+function stopGame(){playing=false;paused=false;cancelAnimationFrame(frame);$('#overlay').classList.add('hidden')}
+function togglePause(){if(!playing)return;if(!paused){paused=true;pauseStarted=performance.now();cancelAnimationFrame(frame);showOverlay('PAUSED','Take a Break','Resume when you are ready.','▶ Resume',togglePause);$('#pause').textContent='▶ Resume'}else{clockStart+=performance.now()-pauseStarted;paused=false;$('#overlay').classList.add('hidden');$('#pause').textContent='Ⅱ Pause';frame=requestAnimationFrame(tick)}}
+$('#pause').onclick=togglePause;$('#quit').onclick=()=>page('select');
+function finish(){const duration=Math.min(elapsed,selected.seconds);stopGame();const total=hits+misses;$('#resultScore').textContent=score;$('#resultAccuracy').textContent=(total?Math.round(hits/total*100):0)+'%';$('#resultCombo').textContent=maxCombo;$('#resultKcal').textContent=(selected.met*3.5*settings.weight/200*duration/60).toFixed(1)+' kcal';const best=+(localStorage.getItem('fitbeatBest')||0);if(score>best)localStorage.setItem('fitbeatBest',score);page('results')}
+$('#retry').onclick=()=>prepare(selected);
+// Camera: optional, no webcam dependency for keyboard mode.
+let lastPoses={left:'',right:''},poseTimes={left:0,right:0};
+async function cameraToggle(){if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null;poseLoop=false;$('#cam').style.display='none';$('#cameraToggle').textContent='📷 Start Camera';$('#cameraStatus').textContent='Camera off';return}
+try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});$('#cam').srcObject=cameraStream;$('#cam').style.display='block';await $('#cam').play();$('#cameraStatus').textContent='Loading pose tracking…';$('#cameraToggle').textContent='Stop Camera';await loadPose();poseLoop=true;processPose()}catch(e){$('#cameraStatus').textContent='Camera unavailable: '+e.message;if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null}$('#cameraToggle').textContent='📷 Start Camera'}}
+function script(src){return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(new Error('Could not load camera library'));document.head.append(s)})}
+async function loadPose(){if(pose)return;await script('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');pose=new Pose({locateFile:f=>'https://cdn.jsdelivr.net/npm/@mediapipe/pose/'+f});pose.setOptions({modelComplexity:0,smoothLandmarks:true,minDetectionConfidence:.55,minTrackingConfidence:.5});pose.onResults(onPose)}
+function onPose(result){const lm=result.poseLandmarks;if(!lm){$('#tracking').textContent='⚠ Tracking Lost — no camera penalty';return}let detected=0;for(const [arm,sh,el,wr,hip] of [['left',11,13,15,23],['right',12,14,16,24]]){const s=lm[sh],e=lm[el],w=lm[wr],h=lm[hip];if(!s||!e||!w||s.visibility<.55||w.visibility<.55)continue;detected++;let move='';const dy=w.y-s.y,dx=Math.abs(w.x-s.x),extension=Math.hypot(w.x-s.x,w.y-s.y);if(dy<-.18)move='up';else if(dx>.22&&Math.abs(dy)<.2)move='side';else if(dy>.25)move='down';else{const shoulders=lm[11]&&lm[12]?Math.abs(lm[11].z-lm[12].z):0;const elbowBent=Math.hypot(w.x-e.x,w.y-e.y)<.23; if(shoulders>.1&&elbowBent&&extension>.12)move='twist'}
+const t=performance.now();if(move&&lastPoses[arm]!==move){lastPoses[arm]=move;poseTimes[arm]=t;inputMove(arm,move)}else if(!move)lastPoses[arm]='';}
+$('#tracking').textContent=detected===2?'📷 Both arms tracked':'⚠ Tracking Lost — keep both arms visible'}
+async function processPose(){while(poseLoop&&cameraStream){try{if($('#cam').readyState>=2)await pose.send({image:$('#cam')})}catch(e){$('#tracking').textContent='⚠ Camera tracking interrupted'}await new Promise(r=>setTimeout(r,90))}}
+$('#cameraToggle').onclick=cameraToggle;
+// Optional phone assist: PeerJS direct peer connection. It does not substitute for full camera pose recognition.
+async function pair(){try{if(!window.Peer)await script('https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js');if(peer)peer.destroy();const code='fitbeat-'+Math.random().toString(36).slice(2,8);peer=new Peer(code);$('#pairCode').textContent='Connecting…';peer.on('open',id=>{$('#pairCode').textContent=id;$('#connection').textContent='📱 Pair code ready'});peer.on('connection',conn=>{phoneConn=conn;conn.on('open',()=>{$('#connection').textContent='📱 Phone connected'});conn.on('data',data=>{if(data?.type==='motion'){phoneMotion=performance.now();phoneArm=data.arm||'left'}if(data?.type==='move'&&data.move&&data.arm){ // Assistance only when camera is active
+if(cameraStream&&performance.now()-phoneMotion<500)inputMove(data.arm,data.move)}});conn.on('close',()=>{$('#connection').textContent='⌨ Keyboard ready'})});peer.on('error',e=>{$('#pairCode').textContent='Pairing failed: '+e.type})}catch(e){$('#pairCode').textContent='Pairing unavailable'}}
+$('#pair').onclick=pair;
+renderStages();
+})();
