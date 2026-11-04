@@ -1,0 +1,1 @@
+FITBEAT targeted patch: replace only index.html, game.js, style.css, controller.html in GitHub Pages root. Keep all assets and other files. Camera preview visible in Settings only. Phone pairing uses PeerJS signaling and reconnects; still requires external signaling service and browser permissions. Test on actual devices.

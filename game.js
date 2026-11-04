@@ -15,7 +15,7 @@ let audio=null,nextBeat=0,beatIndex=0,beatBpm=100;const soundtrack=new Audio();s
 const settings={music:65,fx:45,reduced:false};
 try{Object.assign(settings,JSON.parse(localStorage.getItem('fitbeatSettings')||'{}'))}catch{}
 function save(){localStorage.setItem('fitbeatSettings',JSON.stringify(settings))}
-function page(id){if(playing) stopGame();$$('.page').forEach(p=>p.classList.toggle('active',p.id===id));window.scrollTo(0,0);if(id==='select')renderStages();if(id==='progress')window.fitbeatRefresh?.()}
+function page(id){document.body.classList.toggle('camera-setup-visible',id==='settings');if(playing) stopGame();$$('.page').forEach(p=>p.classList.toggle('active',p.id===id));window.scrollTo(0,0);if(id==='select')renderStages();if(id==='progress')window.fitbeatRefresh?.()}
 $$('[data-page]').forEach(b=>b.addEventListener('click',()=>page(b.dataset.page)));
 function renderStages(){const filtered=stages.filter(s=>mode==='workout'?!['warmup','cooldown'].includes(s.id):s.id===mode);$('#stagecards').innerHTML=filtered.map(s=>`<button class="stage-card" data-stage="${s.id}"><img src="assets/${s.id}.webp" alt="${s.desc} stage background"><span class="stage-emoji">${s.emoji}</span><strong>${s.name}</strong><small>${s.desc} · ${s.bpm} BPM · ${s.seconds}s</small></button>`).join('');$$('[data-stage]').forEach(b=>b.onclick=()=>prepare(stages.find(s=>s.id===b.dataset.stage)))}
 $$('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;$$('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));renderStages()});
@@ -93,7 +93,7 @@ async function cameraToggle(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera requires HTTPS and browser permission');
   cameraStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},facingMode:'user'},audio:false});
   // Keep the camera video visible while playing; hidden Settings videos can stop updating on some browsers.
-  document.body.appendChild(video);video.classList.add('fitbeat-camera-preview');video.style.display='block';video.srcObject=cameraStream;
+  video.classList.add('fitbeat-camera-preview');video.style.display='block';document.body.classList.toggle('camera-setup-visible',$('#settings').classList.contains('active'));video.srcObject=cameraStream;
   await video.play();$('#cameraStatus').textContent='Loading camera model…';$('#cameraToggle').textContent='Stop Camera';
   await loadPose();poseLoop=true;$('#cameraStatus').textContent='Camera running — move your hands';processPose();
  }catch(e){$('#cameraStatus').textContent='Camera error: '+e.message;$('#tracking').textContent='⚠ '+e.message;if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null}video.style.display='none';$('#cameraToggle').textContent='📷 Start Camera'}
@@ -124,23 +124,36 @@ function onPose(result){const lm=result.poseLandmarks;if(!lm){$('#tracking').tex
 async function processPose(){while(poseLoop&&cameraStream){try{if($('#cam').readyState>=2)await pose.send({image:$('#cam')})}catch(e){$('#tracking').textContent='⚠ Pose error: '+e.message;$('#cameraStatus').textContent='Pose error: '+e.message;poseLoop=false;break}await new Promise(r=>setTimeout(r,65))}}
 $('#cameraToggle').onclick=cameraToggle;
 // Optional phone assist: PeerJS direct peer connection. It does not substitute for full camera pose recognition.
+let pairingCode='', pairHeartbeat=null, pairWatchdog=null;
+function pairStatus(message){$('#connection').textContent='📱 '+message;const el=$('#phonePairStatus');if(el)el.textContent=message}
+function acceptPhone(conn){
+ if(phoneConn&&phoneConn!==conn){try{phoneConn.close()}catch{}}
+ phoneConn=conn;pairStatus('Phone connecting…');
+ conn.on('open',()=>{pairStatus('Connected ✓');$('#pairCode').textContent=pairingCode;clearInterval(pairHeartbeat);clearInterval(pairWatchdog);
+  pairHeartbeat=setInterval(()=>{if(conn.open)try{conn.send({type:'ping',t:Date.now()})}catch{}},3000);
+  let lastPong=Date.now();conn.on('data',data=>{if(data?.type==='pong'){lastPong=Date.now();return}if(data?.type==='motion'){phoneMotion=performance.now();phoneArm=data.arm||'left'}if(data?.type==='move'&&data.move&&data.arm)inputMove(data.arm,data.move)});
+  pairWatchdog=setInterval(()=>{if(Date.now()-lastPong>15000){pairStatus('Phone not responding — reconnecting');try{conn.close()}catch{}}},4000);
+ });
+ conn.on('close',()=>{clearInterval(pairHeartbeat);clearInterval(pairWatchdog);if(phoneConn===conn){phoneConn=null;pairStatus('Disconnected — reconnect on phone')}});
+ conn.on('error',e=>pairStatus('Connection error: '+(e.type||e.message)));
+}
 async function pair(){
  try{
   if(!window.Peer)await script('https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js');
-  if(peer)peer.destroy();const code='fitbeat-'+Math.random().toString(36).slice(2,9);
-  peer=new Peer(code,{debug:1});$('#pairCode').textContent='Connecting to pairing server…';
+  if(peer){try{peer.destroy()}catch{}}clearInterval(pairHeartbeat);clearInterval(pairWatchdog);
+  pairingCode='fitbeat-'+Math.random().toString(36).slice(2,9);
+  peer=new Peer(pairingCode,{debug:1});$('#pairCode').textContent='Connecting to pairing server…';pairStatus('Connecting to pairing server…');
   peer.on('open',async id=>{
-   $('#pairCode').textContent=id;$('#connection').textContent='📱 Pair code ready';const target=$('#pairQr');target.innerHTML='';
+   pairingCode=id;$('#pairCode').textContent=id;pairStatus('Ready — scan QR with phone');const target=$('#pairQr');target.innerHTML='';
    const url=new URL('controller.html',location.href);url.searchParams.set('code',id);
+   const link=$('#phonePairLink');if(link){link.href=url.href;link.textContent=url.href}
    try{if(!window.QRCode)await script('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');new QRCode(target,{text:url.href,width:170,height:170,correctLevel:QRCode.CorrectLevel.M});target.style.display='grid'}
-   catch(e){target.innerHTML='';const link=document.createElement('a');link.href=url.href;link.textContent='Open Phone Controller';target.appendChild(link);target.style.display='block'}
+   catch(e){target.innerHTML='';const a=document.createElement('a');a.href=url.href;a.textContent='Open Phone Controller';target.appendChild(a);target.style.display='block'}
   });
-  peer.on('connection',conn=>{phoneConn=conn;$('#connection').textContent='📱 Phone connecting…';conn.on('open',()=>{$('#connection').textContent='📱 Phone connected ✓';$('#pairCode').textContent='Phone connected ✓'});
-   conn.on('data',data=>{if(data?.type==='motion'){phoneMotion=performance.now();phoneArm=data.arm||'left'}if(data?.type==='move'&&data.move&&data.arm)inputMove(data.arm,data.move)});
-   conn.on('close',()=>{$('#connection').textContent='📱 Phone disconnected'});conn.on('error',e=>{$('#connection').textContent='Phone connection error: '+e.message})});
-  peer.on('error',e=>{$('#pairCode').textContent='Pairing error: '+(e.type||e.message)});
-  peer.on('disconnected',()=>{$('#connection').textContent='Pairing server disconnected';try{peer.reconnect()}catch{}});
- }catch(e){$('#pairCode').textContent='Pairing unavailable: '+e.message}
+  peer.on('connection',acceptPhone);
+  peer.on('error',e=>{const msg=e.type||e.message;pairStatus('Pairing error: '+msg);$('#pairCode').textContent='Pairing error: '+msg});
+  peer.on('disconnected',()=>{pairStatus('Pair server disconnected — reconnecting…');try{peer.reconnect()}catch{}});
+ }catch(e){pairStatus('Pairing unavailable: '+e.message);$('#pairCode').textContent='Pairing unavailable'}
 }
 $('#pair').onclick=pair;
 renderStages();
