@@ -21,3 +21,6 @@
 /* Camera preview stays visible while the game is active. */
 .fitbeat-camera-preview{position:fixed!important;right:10px;bottom:10px;width:160px!important;height:120px!important;object-fit:cover;transform:scaleX(-1);z-index:1000;border:2px solid #6de6ff;border-radius:12px;background:#0b1231;pointer-events:none;box-shadow:0 0 14px #33dfff55}
 @media(max-width:600px){.fitbeat-camera-preview{width:100px!important;height:75px!important}}
+
+/* Hide camera preview while keeping MediaPipe tracking active. */
+.fitbeat-camera-preview { display: none !important; }
