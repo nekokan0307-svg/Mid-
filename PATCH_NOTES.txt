@@ -1,0 +1,1 @@
+Replace controller.html only. Prevents overlapping automatic reconnect attempts, adds 12-second timeout, preserves live connections, and displays motion sensor values locally even while disconnected. Does not change camera, game rhythm, assets, or styles. Requires testing on actual iPhone and computer.
