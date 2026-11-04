@@ -1,3 +1,3 @@
-อัปเดตเฉพาะ index.html, game.js, controller.html เพื่อแสดงสถานะเชื่อมต่อและค่าเซนเซอร์ใน Settings และบน iPhone
-ไม่ต้องแทนที่ style.css ที่แก้กล้องแล้ว
-หมายเหตุ: แสดงข้อมูลที่ได้รับจริง ไม่รับประกันว่าจะแก้ปัญหาเครือข่าย PeerJS ได้
+อัปเดตเฉพาะคำอธิบาย How to Play และ Phone Controller ในหน้า Settings
+แทนที่เฉพาะ index.html ใน GitHub repo Mid-
+ไม่แก้ game.js, controller.html, style.css, จังหวะหรือการเชื่อมต่อ
