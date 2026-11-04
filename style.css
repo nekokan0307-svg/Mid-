@@ -17,3 +17,7 @@
 .guard-guide{display:flex;gap:22px;align-items:center;margin-bottom:18px;padding:18px}.guard-guide img{width:185px;max-width:36%;height:225px;object-fit:cover;object-position:center;border-radius:16px;border:1px solid #5ed9ff}.guard-guide h3{color:#6be8ff;margin-top:0}.guard-guide p{line-height:1.6}@media(max-width:650px){.guard-guide{flex-direction:column}.guard-guide img{max-width:100%;width:220px}}
 
 .note.jack{filter:drop-shadow(0 0 13px #ffdb74)}#jumpFx{position:absolute;inset:0;display:grid;place-items:center;z-index:1;pointer-events:none;font-size:clamp(58px,13vw,160px);font-weight:1000;letter-spacing:12px;color:#ffe47e;text-shadow:0 0 25px #ff83d8,0 0 70px #ffe47e;opacity:0;transform:scale(.5) rotate(-9deg)}#jumpFx.jump-pop{animation:jumpPop 1.05s ease-out forwards}@keyframes jumpPop{0%{opacity:0;transform:scale(.45) rotate(-10deg)}20%{opacity:.78;transform:scale(1.12) rotate(3deg)}75%{opacity:.42}100%{opacity:0;transform:scale(1.5) rotate(0)}}.note.jack img{filter:drop-shadow(0 0 10px #ffe47e)}
+
+/* Camera preview stays visible while the game is active. */
+.fitbeat-camera-preview{position:fixed!important;right:10px;bottom:10px;width:160px!important;height:120px!important;object-fit:cover;transform:scaleX(-1);z-index:1000;border:2px solid #6de6ff;border-radius:12px;background:#0b1231;pointer-events:none;box-shadow:0 0 14px #33dfff55}
+@media(max-width:600px){.fitbeat-camera-preview{width:100px!important;height:75px!important}}

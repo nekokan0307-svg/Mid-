@@ -1,0 +1,1 @@
+FITBEAT repair: embedded SVG scene/mascot/note assets to avoid broken paths; corrected startup overlay text sizing; reduced HIT ZONE size. Webcam and phone sensors require real device testing. All files in this ZIP should be uploaded together.

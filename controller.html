@@ -2,7 +2,22 @@
 let peer,conn,enabled=false,last=0;const $=s=>document.querySelector(s);
 function script(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.append(s)})}
 $('#code').value=new URLSearchParams(location.search).get('code')||'';
-$('#connect').onclick=async()=>{try{if(!window.Peer)await script('https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js');peer=peer||new Peer();peer.on('open',()=>{conn=peer.connect($('#code').value.trim());conn.on('open',()=>$('#status').textContent='Connected ✓');conn.on('close',()=>$('#status').textContent='Disconnected');conn.on('error',()=>$('#status').textContent='Connection error')});peer.on('error',e=>$('#status').textContent='Pairing error: '+e.type)}catch(e){$('#status').textContent=e.message}};
+if($('#code').value)setTimeout(connectPhone,500);
+async function connectPhone(){
+ const code=$('#code').value.trim();if(!code){$('#status').textContent='Enter pairing code';return}
+ try{
+  $('#status').textContent='Connecting to pairing server…';
+  if(!window.Peer)await script('https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js');
+  if(peer){try{peer.destroy()}catch{}}peer=new Peer(undefined,{debug:1});
+  const timer=setTimeout(()=>{if(!conn?.open)$('#status').textContent='Connection timed out — retry or check pairing code'},12000);
+  peer.on('open',()=>{conn=peer.connect(code,{reliable:true});$('#status').textContent='Connecting to computer…';
+   conn.on('open',()=>{clearTimeout(timer);$('#status').textContent='Connected ✓ — try manual buttons'});
+   conn.on('close',()=>$('#status').textContent='Disconnected — tap Connect to retry');
+   conn.on('error',e=>$('#status').textContent='Connection error: '+e.message)});
+  peer.on('error',e=>{clearTimeout(timer);$('#status').textContent='Pairing error: '+(e.type||e.message)});
+ }catch(e){$('#status').textContent='Connection failed: '+e.message}
+}
+$('#connect').onclick=connectPhone;
 $('#motion').onclick=async()=>{try{if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){const result=await DeviceMotionEvent.requestPermission();if(result!=='granted')throw Error('Motion permission denied')}enabled=true;$('#status').textContent='Motion sensor enabled';window.addEventListener('devicemotion',e=>{const now=Date.now();if(!enabled||now-last<100||!conn?.open)return;last=now;const a=e.accelerationIncludingGravity||{};conn.send({type:'motion',arm:$('#arm').value,x:a.x||0,y:a.y||0,z:a.z||0})})}catch(e){$('#status').textContent=e.message}};
 document.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{if(conn?.open)conn.send({type:'move',arm:$('#arm').value,move:b.dataset.move});else $('#status').textContent='Connect first'});
 </script></body></html>

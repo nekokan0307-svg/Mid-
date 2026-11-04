@@ -1,0 +1,1 @@
+FITBEAT clean visual rebuild: seven self-contained SVG scenes, four symbol-only SVG note icons, no NEXT panel, transparent square hit zone, mood-changing white Bichon SVG, centered level cards, one stylesheet. Camera/phone tracking modules retained from prior version; not verified on physical hardware. Browser rendering not verified in this environment.
