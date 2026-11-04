@@ -26,3 +26,8 @@
 #cam.fitbeat-camera-preview{position:fixed!important;left:-2px!important;top:-2px!important;right:auto!important;bottom:auto!important;width:2px!important;height:2px!important;opacity:.001!important;z-index:-1!important;pointer-events:none!important;border:0!important;box-shadow:none!important;transform:none!important;}
 body.camera-setup-visible #cam.fitbeat-camera-preview{position:relative!important;left:auto!important;top:auto!important;width:100%!important;height:auto!important;max-height:320px!important;opacity:1!important;z-index:auto!important;border:2px solid #6de6ff!important;box-shadow:0 0 14px #33dfff55!important;transform:scaleX(-1)!important;}
 #phonePairLink{overflow-wrap:anywhere;font-size:12px;}
+
+/* Camera setup preview visibility fix: keep video rendering for MediaPipe. */
+#cam.fitbeat-camera-preview { display:block!important; visibility:visible!important; }
+body:not(.camera-setup-visible) #cam.fitbeat-camera-preview { position:fixed!important; left:-3px!important; top:-3px!important; width:2px!important; height:2px!important; opacity:0!important; z-index:-1!important; }
+body.camera-setup-visible #settings #cam.fitbeat-camera-preview { display:block!important; position:relative!important; left:auto!important; top:auto!important; right:auto!important; bottom:auto!important; width:100%!important; height:auto!important; min-height:180px!important; max-height:320px!important; opacity:1!important; z-index:1!important; visibility:visible!important; }
