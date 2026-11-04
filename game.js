@@ -9,7 +9,7 @@ const stages=[
 {id:'maximum',name:'Maximum',desc:'Mountain Trail',emoji:'⛰',bpm:145,seconds:120,met:8},
 {id:'interval',name:'Interval',desc:'Night Challenge',emoji:'⚡',bpm:130,seconds:180,met:6},
 {id:'cooldown',name:'Cool-down',desc:'Sunset Lakeside',emoji:'☾',bpm:90,seconds:60,met:2.3}];
-const moves=['up','side','twist','down'], symbols={up:'↑',side:'↔',twist:'⤾',down:'↓'};
+const moves=['up','side','down','jack'], symbols={up:'↑',side:'↔',down:'↓',jack:'👏'};
 let mode='workout',selected=stages[1],playing=false,paused=false,started=false,frame=0,notes=[],events=[],score=0,combo=0,maxCombo=0,hits=0,misses=0,elapsed=0,clockStart=0,pauseStarted=0,lastFrame=0,feedbackTimer=0,trackMode='keyboard',pose=null,cameraStream=null,poseLoop=false,peer=null,phoneConn=null,phoneMotion=0,phoneArm='left';
 let audio=null,nextBeat=0,beatIndex=0,beatBpm=100;const soundtrack=new Audio();soundtrack.loop=true;soundtrack.preload='auto';soundtrack.addEventListener('error',()=>{if($('#tracking'))$('#tracking').textContent='Music file unavailable — rhythm cues still work'});
 const settings={music:65,fx:45,reduced:false};
@@ -23,42 +23,74 @@ for(const [id,key] of [['musicVol','music'],['fxVol','fx']]){$('#'+id).value=set
 
 $('#reduceMotion').checked=settings.reduced;document.body.classList.toggle('reduced',settings.reduced);$('#reduceMotion').onchange=e=>{settings.reduced=e.target.checked;document.body.classList.toggle('reduced',settings.reduced);save()};
 function prepare(stage){selected=stage;page('play');$('#playBg').style.backgroundImage=`url("assets/${stage.id}.webp")`;reset();showOverlay('GET READY','Ready to Move?',`${stage.name} • ${stage.bpm} BPM • ${stage.seconds} seconds`,'▶ Start Game',startGame)}
-function reset(){notes=[];events=[];score=combo=maxCombo=hits=misses=elapsed=0;started=false;playing=false;paused=false;$('#score').textContent='0';$('#combo').textContent='0';$('#timer').textContent=formatTime(selected.seconds);$('#progressBar').style.width='0%';$('#feedback').textContent='';$('#leftNotes').querySelectorAll('.note').forEach(n=>n.remove());$('#rightNotes').querySelectorAll('.note').forEach(n=>n.remove());$('#tracking').textContent=cameraStream?'📷 Camera tracking ready':'⌨ Keyboard mode'}
+function reset(){jackOpen=false;armStates.left.position='unknown';armStates.right.position='unknown';notes=[];events=[];score=combo=maxCombo=hits=misses=elapsed=0;started=false;playing=false;paused=false;$('#score').textContent='0';$('#combo').textContent='0';$('#timer').textContent=formatTime(selected.seconds);$('#progressBar').style.width='0%';$('#feedback').textContent='';$('#leftNotes').querySelectorAll('.note').forEach(n=>n.remove());$('#rightNotes').querySelectorAll('.note').forEach(n=>n.remove());$('#tracking').textContent=cameraStream?'📷 Camera tracking ready':'⌨ Keyboard mode'}
 function showOverlay(eyebrow,title,desc,action,fn){$('#overlayEyebrow').textContent=eyebrow;$('#overlayTitle').textContent=title;$('#overlayText').textContent=desc;$('#overlayAction').textContent=action;$('#overlayAction').onclick=fn;$('#overlay').classList.remove('hidden')}
 function formatTime(n){n=Math.max(0,Math.ceil(n));return `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`}
+// Four musical beats = one movement count. All cue times are snapped to music beats.
 function buildSequence(){
-// Human-readable patterns, stage-specific pace and interval blocks; all cue times snapped to the beat.
-const patterns={warmup:[['left','down'],['right','down'],['left','side'],['right','side'],['left','up'],['right','up']],light:[['left','up'],['right','up'],['left','side'],['right','side'],['left','down'],['right','down']],moderate:[['left','side'],['right','side'],['left','up'],['right','up'],['left','twist'],['right','twist'],['left','down'],['right','down']],vigorous:[['left','up'],['right','up'],['left','twist'],['right','twist'],['left','side'],['right','side'],['left','down'],['right','down']],maximum:[['left','twist'],['right','twist'],['left','up'],['right','up'],['left','side'],['right','side'],['left','twist'],['right','twist']],interval:[['left','up'],['right','up'],['left','side'],['right','side'],['left','twist'],['right','twist'],['left','down'],['right','down']],cooldown:[['left','up'],['right','up'],['left','side'],['right','side'],['left','down'],['right','down']]};
-const beat=60/selected.bpm,steps={warmup:7,light:6,moderate:5,vigorous:4,maximum:3,interval:4,cooldown:8};let t=2.2,index=0;
-while(t<selected.seconds-1.1){const pattern=patterns[selected.id], [arm,move]=pattern[index%pattern.length];events.push({id:index,arm,move,at:t,spawned:false,judged:false});index++;let spacing=steps[selected.id];if(selected.id==='interval')spacing=Math.floor(t/30)%2===0?3:7;if(move==='twist')spacing+=2;t+=spacing*beat;}
+ const beat=60/selected.bpm, count=4*beat, end=selected.seconds-0.65;
+ let t=4*beat, id=0;
+ const add=(arm,move,time)=>{if(time<end)events.push({id:id++,arm,move,at:time,spawned:false,judged:false})};
+ const both=(move,time)=>{add('left',move,time);add('right',move,time)};
+ const repeated=(arm,move,n,gap)=>{for(let i=0;i<n;i++){if(arm==='both')both(move,t);else add(arm,move,t);t+=gap*count}};
+ const alternate=(n,gap)=>{for(let i=0;i<n;i++){add(i%2===0?'left':'right','up',t);t+=gap*count}};
+ const updown=(arm,n)=>{for(let i=0;i<n;i++){if(arm==='both')both('up',t);else add(arm,'up',t);t+=count;if(arm==='both')both('down',t);else add(arm,'down',t);t+=3*count}};
+ const jack=(n,gap)=>{for(let i=0;i<n;i++){both('jack',t);t+=gap*count}};
+ const warm=()=>{both('up',t);t+=count;both('side',t);t+=count;updown('both',6);add('left','side',t);t+=2*count;add('right','side',t);t+=2*count;for(let i=0;i<6;i++){add('left','side',t);t+=2*count;add('right','side',t);t+=2*count}};
+ const light=()=>{repeated('right','up',6,1);t+=2*count;repeated('left','up',6,1);t+=2*count;repeated('right','side',6,1);t+=2*count;repeated('left','side',6,1);t+=5*count;jack(8,3);alternate(6,1);repeated('both','side',6,2)};
+ const moderate=()=>{alternate(6,1);t+=count;repeated('right','up',8,.5);t+=count;repeated('left','up',8,.5);t+=count;repeated('both','side',6,1);jack(8,3);updown('right',6);updown('left',6);t+=2*count};
+ const vigorous=(fast=false)=>{const k=fast?.5:1;alternate(6,k);t+=count;repeated('right','up',8,.5*k);t+=count;repeated('left','up',8,.5*k);t+=count;jack(8,2*k);t+=count;repeated('both','side',6,k);t+=count};
+ const interval=()=>{const hard=Math.floor(t/30)%2===1, factor=hard?.5:1;repeated('right','up',6,factor);t+=count;repeated('left','up',6,factor);t+=count;jack(8,2*factor);t+=count};
+ while(t<end){const before=t;
+  switch(selected.id){case 'warmup':case 'cooldown':warm();break;case 'light':light();break;case 'moderate':moderate();break;case 'vigorous':vigorous();break;case 'maximum':vigorous(true);break;case 'interval':interval();break;}
+  if(t<=before)t=before+count;
+ }
+ events.sort((a,b)=>a.at-b.at||a.id-b.id);
 }
 function initAudio(){try{audio=audio||new (window.AudioContext||window.webkitAudioContext)();audio.resume()}catch{}}
 function tone(freq,duration,vol,type='sine'){if(!audio||vol<=0)return;const osc=audio.createOscillator(),gain=audio.createGain(),now=audio.currentTime;osc.type=type;osc.frequency.setValueAtTime(freq,now);gain.gain.setValueAtTime(Math.min(.16,vol/100*.12),now);gain.gain.exponentialRampToValueAtTime(.001,now+duration);osc.connect(gain).connect(audio.destination);osc.start(now);osc.stop(now+duration+.01)}
 function startGame(){reset();buildSequence();initAudio();soundtrack.src='assets/music/'+selected.id+'.ogg';soundtrack.volume=settings.music/100;soundtrack.currentTime=0;soundtrack.play().catch(()=>{$('#tracking').textContent='Tap to enable music; gameplay continues'});$('#overlay').classList.add('hidden');playing=true;started=true;clockStart=performance.now();lastFrame=clockStart;beatIndex=0;nextBeat=0;frame=requestAnimationFrame(tick)}
 function tick(now){if(!playing||paused)return;elapsed=(now-clockStart)/1000;const remain=selected.seconds-elapsed;$('#timer').textContent=formatTime(remain);$('#progressBar').style.width=(100*Math.min(1,elapsed/selected.seconds))+'%';
 // Music is an original per-stage loop, synchronized to the session start.
-for(const ev of events){if(!ev.spawned && elapsed>=ev.at-2.5){ev.spawned=true;const el=document.createElement('div');el.className='note '+ev.move;const iconName=ev.move==='side'?'side_'+ev.arm:ev.move==='twist'?'twist_punch_'+ev.arm:ev.move;el.innerHTML=`<img src="assets/icons/${iconName}.png" alt="${ev.arm} ${ev.move}">`;el.setAttribute('aria-label',ev.move);ev.el=el;$('#'+ev.arm+'Notes').append(el);notes.push(ev)}
-if(ev.spawned&&!ev.judged){const area=ev.el.parentElement;const h=area.clientHeight;const target=h*.76+33;const progress=(elapsed-(ev.at-2.5))/2.5;ev.el.style.top=(Math.max(-40,Math.min(h+70,progress*target)))+'px';if(elapsed>ev.at+.38)judge(ev,false)}}
+for(const ev of events){if(!ev.spawned && elapsed>=ev.at-2.5){ev.spawned=true;const el=document.createElement('div');el.className='note '+ev.move;const iconName=ev.move==='side'?'side_'+ev.arm:ev.move;el.innerHTML=`<img src="assets/icons/${iconName}.${ev.move==='jack'?'svg':'png'}" alt="${ev.arm} ${ev.move}">`;el.setAttribute('aria-label',ev.move);ev.el=el;$('#'+ev.arm+'Notes').append(el);notes.push(ev);if(ev.move==='jack'&&ev.arm==='left'){const j=$('#jumpFx');j.classList.remove('jump-pop');void j.offsetWidth;j.classList.add('jump-pop')}}
+if(ev.spawned&&!ev.judged){const area=ev.el.parentElement;const h=area.clientHeight;const target=h*.76+33;const progress=(elapsed-(ev.at-2.5))/2.5;ev.el.style.top=(Math.max(-40,Math.min(h+70,progress*target)))+'px';if(elapsed>ev.at+.58)judge(ev,false)}}
 if(elapsed>=selected.seconds){finish();return}frame=requestAnimationFrame(tick)}
 function feedback(text,good){$('#feedback').textContent=text;$('#feedback').style.color=good?'#81f5e5':'#ff9fbd';clearTimeout(feedbackTimer);feedbackTimer=setTimeout(()=>$('#feedback').textContent='',450)}
 function judge(ev,good){if(ev.judged)return;ev.judged=true;ev.el?.remove();if(good){hits++;combo++;maxCombo=Math.max(combo,maxCombo);const delta=Math.abs(elapsed-ev.at);score+=delta<.14?120:90;feedback(delta<.14?'PERFECT!':'GREAT!',true);tone(delta<.14?660:520,.12,settings.fx)}else{misses++;combo=0;feedback('MISS',false);tone(190,.13,settings.fx)}$('#score').textContent=score;$('#combo').textContent=combo}
-function inputMove(arm,move){if(!playing||paused)return;const candidate=events.filter(e=>e.arm===arm&&e.move===move&&e.spawned&&!e.judged&&Math.abs(e.at-elapsed)<.38).sort((a,b)=>Math.abs(a.at-elapsed)-Math.abs(b.at-elapsed))[0];if(candidate)judge(candidate,true)}
-const keys={'1':['left','up'],'2':['left','side'],'3':['left','twist'],'4':['left','down'],q:['right','up'],w:['right','side'],e:['right','twist'],r:['right','down']};
+function inputMove(arm,move){if(!playing||paused)return;const candidate=events.filter(e=>e.arm===arm&&e.move===move&&e.spawned&&!e.judged&&Math.abs(e.at-elapsed)<.58).sort((a,b)=>Math.abs(a.at-elapsed)-Math.abs(b.at-elapsed))[0];if(candidate)judge(candidate,true)}
+const keys={'1':['left','up'],'2':['left','side'],'3':['left','jack'],'4':['left','down'],q:['right','up'],w:['right','side'],e:['right','jack'],r:['right','down']};
 window.addEventListener('keydown',e=>{if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;const k=e.key.toLowerCase();if(keys[k]){e.preventDefault();inputMove(...keys[k])}if(k===' '&&$('#play').classList.contains('active')){e.preventDefault();if(playing)togglePause()}});
 function stopGame(){soundtrack.pause();playing=false;paused=false;cancelAnimationFrame(frame);$('#overlay').classList.add('hidden')}
 function togglePause(){if(!playing)return;if(!paused){paused=true;soundtrack.pause();pauseStarted=performance.now();cancelAnimationFrame(frame);showOverlay('PAUSED','Take a Break','Resume when you are ready.','▶ Resume',togglePause);$('#pause').textContent='▶ Resume'}else{clockStart+=performance.now()-pauseStarted;paused=false;soundtrack.play().catch(()=>{});$('#overlay').classList.add('hidden');$('#pause').textContent='Ⅱ Pause';frame=requestAnimationFrame(tick)}}
 $('#pause').onclick=togglePause;$('#quit').onclick=()=>page('select');
 function finish(){const duration=Math.min(elapsed,selected.seconds);stopGame();const total=hits+misses;$('#resultScore').textContent=score;$('#resultAccuracy').textContent=(total?Math.round(hits/total*100):0)+'%';$('#resultCombo').textContent=maxCombo;const kcal=selected.met*(window.fitbeatGetWeight?.()||60)*duration/3600;$('#resultKcal').textContent=kcal.toFixed(1)+' kcal';window.fitbeatRecord?.({stage:selected.name,stageId:selected.id,score,accuracy:total?Math.round(hits/total*100):0,maxCombo,durationSeconds:Math.round(duration),kcal:Number(kcal.toFixed(2))});const best=+(localStorage.getItem('fitbeatBest')||0);if(score>best)localStorage.setItem('fitbeatBest',score);page('results')}
 $('#retry').onclick=()=>prepare(selected);
-// Camera: optional, no webcam dependency for keyboard mode.
-let lastPoses={left:'',right:''},poseTimes={left:0,right:0};
+// Camera: hands are located using wrist/shoulder landmarks, without leg tracking.
+// Jumping Jack requires both arms to rise and return down; no jump is required for scoring.
+const armStates={left:{last:'',lastAt:0,position:'unknown'},right:{last:'',lastAt:0,position:'unknown'}};
+let jackOpen=false,jackOpenAt=0,lastJack=0;
 async function cameraToggle(){if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null;poseLoop=false;$('#cam').style.display='none';$('#cameraToggle').textContent='📷 Start Camera';$('#cameraStatus').textContent='Camera off';return}
-try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});$('#cam').srcObject=cameraStream;$('#cam').style.display='block';await $('#cam').play();$('#cameraStatus').textContent='Loading pose tracking…';$('#cameraToggle').textContent='Stop Camera';await loadPose();poseLoop=true;processPose()}catch(e){$('#cameraStatus').textContent='Camera unavailable: '+e.message;if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null}$('#cameraToggle').textContent='📷 Start Camera'}}
+try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});$('#cam').srcObject=cameraStream;$('#cam').style.display='block';await $('#cam').play();$('#cameraStatus').textContent='Loading hand position tracking…';$('#cameraToggle').textContent='Stop Camera';await loadPose();poseLoop=true;processPose()}catch(e){$('#cameraStatus').textContent='Camera unavailable: '+e.message;if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null}$('#cameraToggle').textContent='📷 Start Camera'}}
 function script(src){return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=()=>reject(new Error('Could not load camera library'));document.head.append(s)})}
-async function loadPose(){if(pose)return;await script('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');pose=new Pose({locateFile:f=>'https://cdn.jsdelivr.net/npm/@mediapipe/pose/'+f});pose.setOptions({modelComplexity:0,smoothLandmarks:true,minDetectionConfidence:.55,minTrackingConfidence:.5});pose.onResults(onPose)}
-function onPose(result){const lm=result.poseLandmarks;if(!lm){$('#tracking').textContent='⚠ Tracking Lost — no camera penalty';return}let detected=0;for(const [arm,sh,el,wr,hip] of [['left',11,13,15,23],['right',12,14,16,24]]){const s=lm[sh],e=lm[el],w=lm[wr],h=lm[hip];if(!s||!e||!w||s.visibility<.55||w.visibility<.55)continue;detected++;let move='';const dy=w.y-s.y,dx=Math.abs(w.x-s.x),extension=Math.hypot(w.x-s.x,w.y-s.y);if(dy<-.18)move='up';else if(dx>.22&&Math.abs(dy)<.2)move='side';else if(dy>.25)move='down';else{const shoulders=lm[11]&&lm[12]?Math.abs(lm[11].z-lm[12].z):0;const elbowBent=Math.hypot(w.x-e.x,w.y-e.y)<.23; if(shoulders>.1&&elbowBent&&extension>.12)move='twist'}
-const t=performance.now();if(move&&lastPoses[arm]!==move){lastPoses[arm]=move;poseTimes[arm]=t;inputMove(arm,move)}else if(!move)lastPoses[arm]='';}
-$('#tracking').textContent=detected===2?'📷 Both arms tracked':'⚠ Tracking Lost — keep both arms visible'}
+async function loadPose(){if(pose)return;await script('https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js');pose=new Pose({locateFile:f=>'https://cdn.jsdelivr.net/npm/@mediapipe/pose/'+f});pose.setOptions({modelComplexity:1,smoothLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.45});pose.onResults(onPose)}
+function onPose(result){const lm=result.poseLandmarks;if(!lm){$('#tracking').textContent='⚠ Hands not visible';return}
+const now=performance.now();let tracked=0;
+for(const [arm,sh,wr,hip] of [['left',11,15,23],['right',12,16,24]]){
+ const s=lm[sh],w=lm[wr],h=lm[hip],st=armStates[arm];if(!s||!w||s.visibility<.42||w.visibility<.40)continue;tracked++;
+ const width=Math.max(.12,Math.abs(lm[11].x-lm[12].x));const dx=(w.x-s.x)/width,dy=(w.y-s.y)/width;
+ const position=dy<-.65?'up':Math.abs(dx)>.85&&Math.abs(dy)<.55?'side':dy>.72?'down':'transition';
+ if(position!=='transition' && position!==st.position){st.position=position;st.lastAt=now;inputMove(arm,position)}
+ else if(position==='transition')st.position='transition';
+}
+if(tracked===2){const left=armStates.left.position,right=armStates.right.position;
+ if(left==='up'&&right==='up'&&!jackOpen){jackOpen=true;jackOpenAt=now}
+ if(jackOpen&&left==='down'&&right==='down'&&now-jackOpenAt>160&&now-lastJack>650){
+  inputMove('left','jack');inputMove('right','jack');lastJack=now;jackOpen=false;
+ }
+ if(jackOpen&&now-jackOpenAt>4500)jackOpen=false;
+}
+$('#tracking').textContent=tracked===2?'📷 Both hands tracked · UP / SIDE / DOWN / JACK':'⚠ Show both hands and shoulders';
+}
 async function processPose(){while(poseLoop&&cameraStream){try{if($('#cam').readyState>=2)await pose.send({image:$('#cam')})}catch(e){$('#tracking').textContent='⚠ Camera tracking interrupted'}await new Promise(r=>setTimeout(r,90))}}
 $('#cameraToggle').onclick=cameraToggle;
 // Optional phone assist: PeerJS direct peer connection. It does not substitute for full camera pose recognition.
