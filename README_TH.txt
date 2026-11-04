@@ -1,4 +1,3 @@
-FITBEAT Camera Setup Preview CSS Patch
-แทนที่เฉพาะ style.css ใน GitHub repo Mid-
-เข้า Settings แล้วกด Start Camera เพื่อดูภาพ
-ไม่เปลี่ยนจังหวะเพลงหรือการเชื่อมต่อโทรศัพท์
+อัปเดตเฉพาะ index.html, game.js, controller.html เพื่อแสดงสถานะเชื่อมต่อและค่าเซนเซอร์ใน Settings และบน iPhone
+ไม่ต้องแทนที่ style.css ที่แก้กล้องแล้ว
+หมายเหตุ: แสดงข้อมูลที่ได้รับจริง ไม่รับประกันว่าจะแก้ปัญหาเครือข่าย PeerJS ได้

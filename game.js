@@ -126,15 +126,17 @@ $('#cameraToggle').onclick=cameraToggle;
 // Optional phone assist: PeerJS direct peer connection. It does not substitute for full camera pose recognition.
 let pairingCode='', pairHeartbeat=null, pairWatchdog=null;
 function pairStatus(message){$('#connection').textContent='📱 '+message;const el=$('#phonePairStatus');if(el)el.textContent=message}
+function phoneDiag(id,msg){const el=$(id);if(el)el.textContent=msg}
+let phoneLastSensor=0;setInterval(()=>{if(phoneConn?.open&&phoneLastSensor&&Date.now()-phoneLastSensor>3000)phoneDiag('#phoneSensorState','Motion sensor: No recent data (check iPhone permission)')},1000);
 function acceptPhone(conn){
  if(phoneConn&&phoneConn!==conn){try{phoneConn.close()}catch{}}
- phoneConn=conn;pairStatus('Phone connecting…');
- conn.on('open',()=>{pairStatus('Connected ✓');$('#pairCode').textContent=pairingCode;clearInterval(pairHeartbeat);clearInterval(pairWatchdog);
+ phoneConn=conn;pairStatus('Phone connecting…');phoneDiag('#phoneLinkState','Connection: Connecting…');
+ conn.on('open',()=>{pairStatus('Connected ✓');phoneDiag('#phoneLinkState','Connection: Connected ✓');$('#pairCode').textContent=pairingCode;clearInterval(pairHeartbeat);clearInterval(pairWatchdog);
   pairHeartbeat=setInterval(()=>{if(conn.open)try{conn.send({type:'ping',t:Date.now()})}catch{}},3000);
-  let lastPong=Date.now();conn.on('data',data=>{if(data?.type==='pong'){lastPong=Date.now();return}if(data?.type==='motion'){phoneMotion=performance.now();phoneArm=data.arm||'left'}if(data?.type==='move'&&data.move&&data.arm)inputMove(data.arm,data.move)});
+  let lastPong=Date.now();conn.on('data',data=>{if(data?.type==='pong'){lastPong=Date.now();return}if(data?.type==='motion'){phoneMotion=performance.now();phoneLastSensor=Date.now();phoneArm=data.arm||'left';phoneDiag('#phoneSensorState','Motion sensor: Receiving data ✓ ('+phoneArm+' arm)');const n=v=>Number.isFinite(Number(v))?Number(v).toFixed(2):'—';phoneDiag('#phoneSensorValues','X: '+n(data.x)+' · Y: '+n(data.y)+' · Z: '+n(data.z))}if(data?.type==='move'&&data.move&&data.arm){phoneDiag('#phoneLastInput','Last test: '+data.arm.toUpperCase()+' '+data.move.toUpperCase()+' ✓');inputMove(data.arm,data.move)}});
   pairWatchdog=setInterval(()=>{if(Date.now()-lastPong>15000){pairStatus('Phone not responding — reconnecting');try{conn.close()}catch{}}},4000);
  });
- conn.on('close',()=>{clearInterval(pairHeartbeat);clearInterval(pairWatchdog);if(phoneConn===conn){phoneConn=null;pairStatus('Disconnected — reconnect on phone')}});
+ conn.on('close',()=>{clearInterval(pairHeartbeat);clearInterval(pairWatchdog);if(phoneConn===conn){phoneConn=null;pairStatus('Disconnected — reconnect on phone');phoneDiag('#phoneLinkState','Connection: Disconnected')}});
  conn.on('error',e=>pairStatus('Connection error: '+(e.type||e.message)));
 }
 async function pair(){
@@ -144,7 +146,7 @@ async function pair(){
   pairingCode='fitbeat-'+Math.random().toString(36).slice(2,9);
   peer=new Peer(pairingCode,{debug:1});$('#pairCode').textContent='Connecting to pairing server…';pairStatus('Connecting to pairing server…');
   peer.on('open',async id=>{
-   pairingCode=id;$('#pairCode').textContent=id;pairStatus('Ready — scan QR with phone');const target=$('#pairQr');target.innerHTML='';
+   pairingCode=id;$('#pairCode').textContent=id;pairStatus('Ready — scan QR with phone');phoneDiag('#phoneLinkState','Connection: Waiting for iPhone');const target=$('#pairQr');target.innerHTML='';
    const url=new URL('controller.html',location.href);url.searchParams.set('code',id);
    const link=$('#phonePairLink');if(link){link.href=url.href;link.textContent=url.href}
    try{if(!window.QRCode)await script('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js');new QRCode(target,{text:url.href,width:170,height:170,correctLevel:QRCode.CorrectLevel.M});target.style.display='grid'}
