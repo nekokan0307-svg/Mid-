@@ -26,9 +26,9 @@ function prepare(stage){selected=stage;page('play');$('#playBg').style.backgroun
 function reset(){jackOpen=false;armStates.left.position='unknown';armStates.right.position='unknown';notes=[];events=[];score=combo=maxCombo=hits=misses=elapsed=0;started=false;playing=false;paused=false;$('#score').textContent='0';$('#combo').textContent='0';$('#timer').textContent=formatTime(selected.seconds);$('#progressBar').style.width='0%';$('#feedback').textContent='';$('#leftNotes').querySelectorAll('.note').forEach(n=>n.remove());$('#rightNotes').querySelectorAll('.note').forEach(n=>n.remove());$('#tracking').textContent=cameraStream?'📷 Camera tracking ready':'⌨ Keyboard mode'}
 function showOverlay(eyebrow,title,desc,action,fn){$('#overlayEyebrow').textContent=eyebrow;$('#overlayTitle').textContent=title;$('#overlayText').textContent=desc;$('#overlayAction').textContent=action;$('#overlayAction').onclick=fn;$('#overlay').classList.remove('hidden')}
 function formatTime(n){n=Math.max(0,Math.ceil(n));return `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`}
-// Four musical beats = one movement count. All cue times are snapped to music beats.
+// One musical beat = one movement count. All cue times are snapped to the music timeline.
 function buildSequence(){
- const beat=60/selected.bpm, count=4*beat, end=selected.seconds-0.65;
+ const beat=60/selected.bpm, count=beat, end=selected.seconds-0.65;
  let t=4*beat, id=0;
  const add=(arm,move,time)=>{if(time<end)events.push({id:id++,arm,move,at:time,spawned:false,judged:false})};
  const both=(move,time)=>{add('left',move,time);add('right',move,time)};
