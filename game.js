@@ -32,9 +32,9 @@ function buildSequence(){
  const beat=60/selected.bpm, end=selected.seconds-0.65;
  // Number of musical beats per movement count. The minimum between
  // repeated cues prevents dense overlapping notes and gives webcam time.
- const pace={warmup:4,light:3,moderate:3,vigorous:3,maximum:2.5,interval:3,cooldown:4};
+ const pace={warmup:4.5,light:3.5,moderate:3.5,vigorous:3.5,maximum:3,interval:3.5,cooldown:4.5};
  const count=beat*pace[selected.id];
- const minGap=beat*({warmup:3,light:2.5,moderate:2.5,vigorous:2.5,maximum:2.5,interval:2.5,cooldown:3}[selected.id]);
+ const minGap=beat*({warmup:3.5,light:3,moderate:3, vigorous:3,maximum:3,interval:3,cooldown:3.5}[selected.id]);
  const step=(gap)=>Math.max(minGap,gap*count);
  let t=4*beat, id=0;
  const add=(arm,move,time)=>{if(time<end)events.push({id:id++,arm,move,at:time,spawned:false,judged:false})};

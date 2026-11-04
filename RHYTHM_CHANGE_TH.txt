@@ -1,0 +1,2 @@
+FITBEAT Slightly Slower Rhythm
+ลดความถี่ของโน้ตเล็กน้อยจาก Balanced Rhythm: Warm-up/Cool-down 4→4.5 beats, Light/Moderate/Vigorous/Interval 3→3.5 beats, Maximum 2.5→3 beats. เพิ่มช่องว่างขั้นต่ำระหว่างโน้ตแต่ละเลนด้วย โดยคง BPM เพลง ลำดับท่า จำนวนรอบ ภาพ และระบบอื่นไว้ตามเดิม
